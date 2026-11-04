@@ -31,29 +31,48 @@ CREATE DATABASE notes_db OWNER notes_app;
 
 Вместо `CHANGE_ME` укажи свой пароль. Если пользователь и база уже созданы, повторять эти команды не нужно.
 
-Подключись к новой базе и выполни файл со схемой:
+Таблицы создаются миграциями Alembic на следующем шаге. [schema.sql](schema.sql) содержит исходную схему таблицы. Пока пользователей в API нет, `user_id` для заметок автоматически равен `1`.
 
-```text
-\connect notes_db notes_app localhost 5432
-\i 'C:/Users/user/Desktop/HW/web-http-lab/schema.sql'
-```
-
-При запросе пароля введи пароль `notes_app`. Путь к `schema.sql` замени своим, если проект лежит в другой папке. Ожидаемый ответ — `CREATE TABLE`.
-
-Схема находится в [schema.sql](schema.sql). Пока пользователей в API нет, `user_id` для заметок автоматически равен `1`.
-
-### 3. Запустить сервер
+### 3. Применить миграции и запустить API
 
 Вернись в `cmd` с активным окружением и выполни:
 
 ```bat
 set "DATABASE_URL=postgresql://notes_app:CHANGE_ME@localhost:5432/notes_db"
+python -m alembic upgrade head
 python -m uvicorn main:app --reload
 ```
 
 Используй тот же пароль, что при создании `notes_app`. Настройка действует в текущем окне `cmd`; в новом окне её нужно задать снова. Настоящий пароль в репозиторий не добавляй. Спецсимволы пароля в URL нужно кодировать.
 
 Открой [документацию API](http://127.0.0.1:8000/docs) — оттуда можно отправлять запросы.
+
+## Миграции (★)
+
+Миграции лежат в `migrations/versions`:
+
+- `001` — создаёт таблицу `notes`.
+- `002` — добавляет `is_archived` со значением `FALSE` по умолчанию.
+
+Текущая версия и история:
+
+```bat
+python -m alembic current
+python -m alembic history
+```
+
+После обновления ожидается `002 (head)`. Alembic хранит версию в таблице `alembic_version`: повторный `upgrade head` уже применённые миграции не выполняет.
+
+Если таблица создана старым `schema.sql`, миграции ещё не подключались и её структура совпадает с `001_create_notes_table.py`, можно зарегистрировать исходную версию и обновить базу:
+
+```bat
+python -m alembic stamp 001
+python -m alembic upgrade head
+```
+
+Для пустой базы используется сразу `upgrade head`. Поле `is_archived` добавлено в БД; управление архивом через API пока не реализовано.
+
+При проверке старая заметка сохранилась после обновления. На отдельной пустой базе обе миграции выполнились по порядку, а повторный запуск завершился без новых изменений.
 
 ## Что умеет API
 
@@ -110,6 +129,14 @@ python -m uvicorn main:app --reload
 
 ![Заметка после перезапуска](docs/screenshots/05-note-after-restart.png)
 
+Обновление базы до версии `002`:
+
+![Применение второй миграции](docs/screenshots/06-migration-upgrade.png)
+
+Миграции на пустой базе и повторный запуск:
+
+![Проверка миграций с нуля](docs/screenshots/07-migrations-fresh-database.png)
+
 </details>
 
 ## Отправка изменений на GitHub
@@ -117,9 +144,10 @@ python -m uvicorn main:app --reload
 Из папки проекта:
 
 ```bat
-git add .
-git commit -m "feat: persist notes in postgres"
-git push
+git add alembic.ini migrations requirements.txt README.md docs/screenshots
+git diff --cached
+git commit -m "feat: add Alembic migrations"
+git push -u origin HEAD
 ```
 
 Перед commit проверь, что среди изменений нет настоящего пароля.
